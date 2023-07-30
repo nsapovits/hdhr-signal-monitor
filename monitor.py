@@ -1,12 +1,18 @@
 # Imports
 import requests
 import time
+from tabulate import tabulate
 
 # Variables
 status_url = 'http://hdhomerun.local/status.json'
 mil = 1000000
-expected_tuner_data_len = 9
-print_to_console = False
+tuners = [0, 1]
+stations = [{"freq": 539, "rf": 25, "location": "BWI"},
+            {"freq": 587, "rf": 33, "location": "DCA"}]
+status = [['Tuner', 'Channel', 'RF', 'Loc', 'Name', 'ST', 'QU', 'SY']]
+tabulate_align = ("center","center","center","center","center","right","right","right",)
+# 5 when using config, 9 when tuned
+expected_tuner_data_len = [5, 9]
 
 # Request to HDHR
 req_start_time = time.perf_counter_ns()
@@ -18,49 +24,47 @@ request_time = round((req_end_time - req_start_time) / mil)
 if response.status_code == 200:
     json_data = response.json()
 
-    # Parse Tuner 0
-    if len(json_data[0]) == expected_tuner_data_len:
-        t0_channel = json_data[0]['VctNumber']
-        t0_name = json_data[0]['VctName']
-        t0_freq = round((json_data[0]['Frequency'] / mil))
-        t0_strength = json_data[0]['SignalStrengthPercent']
-        t0_quality = json_data[0]['SignalQualityPercent']
-        t0_symbol = json_data[0]['SymbolQualityPercent']
-        t0_bitrate = round((json_data[0]['NetworkRate'] / mil), 2)
-        if print_to_console:
-            print(f"Tuner 0:\n"
-                  f"\tCH: {t0_channel}\n"
-                  f"\tCS: {t0_name}\n"
-                  f"\tFQ: {t0_freq} Mhz\n"
-                  f"\tST: {t0_strength}%\n"
-                  f"\tQU: {t0_quality}%\n"
-                  f"\tSY: {t0_symbol}%\n"
-                  f"\tBR: {t0_bitrate} Mbps\n")
-    else:
-        print("Tuner 0:\n"
-              "\tInactive\n")
+    active_tuners = 0
+    for tuner in tuners:
+        if len(json_data[tuner]) in expected_tuner_data_len:
+            try:
+                channel = json_data[tuner]['VctNumber']
+            except KeyError:
+                channel = "-"
+            try:
+                name = json_data[tuner]['VctName']
+            except KeyError:
+                name = "--"
+            freq = round((json_data[tuner]['Frequency'] / mil))
+            rf = "--"
+            location = "---"
+            for station in stations:
+                if station['freq'] == freq:
+                    rf = station['rf']
+                    location = station['location']
+                    break
+            strength = json_data[tuner]['SignalStrengthPercent']
+            quality = json_data[tuner]['SignalQualityPercent']
+            symbol = json_data[tuner]['SymbolQualityPercent']
+            # try:
+            #     bitrate = round((json_data[tuner]['NetworkRate'] / mil), 2)
+            # except KeyError:
+            #     bitrate = "n/a"
+            status.append([tuner,
+                           channel,
+                           rf,
+                           location,
+                           name,
+                           str(strength) + '%',
+                           str(quality) + '%',
+                           str(symbol) + '%'])
+            active_tuners += 1
 
-    # Parse Tuner 1
-    if len(json_data[1]) == expected_tuner_data_len:
-        t1_channel = json_data[1]['VctNumber']
-        t1_name = json_data[1]['VctName']
-        t1_freq = round((json_data[1]['Frequency'] / mil))
-        t1_strength = json_data[1]['SignalStrengthPercent']
-        t1_quality = json_data[1]['SignalQualityPercent']
-        t1_symbol = json_data[1]['SymbolQualityPercent']
-        t1_bitrate = round((json_data[1]['NetworkRate'] / mil), 2)
-        if print_to_console:
-            print(f"Tuner 1:\n"
-                  f"\tCH: {t1_channel}\n"
-                  f"\tCS: {t1_name}\n"
-                  f"\tFQ: {t1_freq} Mhz\n"
-                  f"\tST: {t1_strength}%\n"
-                  f"\tQU: {t1_quality}%\n"
-                  f"\tSY: {t1_symbol}%\n"
-                  f"\tBR: {t1_bitrate} Mbps\n")
+    if active_tuners:
+        print(tabulate(status, headers="firstrow", tablefmt="simple_outline",
+                       colalign=tabulate_align))
     else:
-        print("Tuner 1:\n"
-              "\tInactive\n")
+        print("No tuners active")
 
 else:
     print(f"Error: Received status code {response.status_code}")
