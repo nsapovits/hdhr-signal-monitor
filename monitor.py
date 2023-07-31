@@ -1,26 +1,33 @@
 # Imports
 import requests
 import time
+import csv
 from tabulate import tabulate
 
 # Variables
 status_url = 'http://hdhomerun.local/status.json'
-repeat = 60
+output_csv = 'output.csv'
+repeat = 5
 repeat_interval = 1  # don't set this too low
-print_timers = True
+print_timers = False
 mil = 1000000  # 1 million to simplify later calculations
 bil = 1000000000  # 1 billion to simplify later calculations
 tuners = [0, 1]
 stations = [{"freq": 539, "rf": 25, "location": "BWI"},
             {"freq": 587, "rf": 33, "location": "DCA"}]
-tabulate_align = ("center", "center", "center", "center", "center", "right", "right", "right",)
+csv_header = ['Timestamp', 'Tuner', 'Channel', 'RF', 'Location', 'Name', 'Strength', 'Quality', 'Symbols']
+tabulate_align = ("center", "center", "center", "center", "center", "center", "right", "right", "right",)
 expected_tuner_data_len = [5, 9]  # 5 when using config tool, 9 when tuned
+
+csv_file = open(output_csv, mode='w', newline='')
+writer = csv.writer(csv_file)
+writer.writerow(csv_header)
 
 while repeat > 0:
 
     # Initialize
     script_start_time = time.perf_counter_ns()
-    status = [['Tuner', 'Channel', 'RF', 'Loc', 'Name', 'ST', 'QU', 'SY']]
+    status = [['Timestamp', 'Tuner', 'Channel', 'RF', 'Loc', 'Name', 'ST', 'QU', 'SY']]
 
     # Request to HDHR
     req_start_time = time.perf_counter_ns()
@@ -31,6 +38,7 @@ while repeat > 0:
     # Parse JSON response
     if response.status_code == 200:
         json_data = response.json()
+        exec_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time()))
 
         active_tuners = 0
         for tuner in tuners:
@@ -69,15 +77,18 @@ while repeat > 0:
                 # except KeyError:
                 #     bitrate = "n/a"
 
-                # Add to the "status" array
-                status.append([tuner,
-                               channel,
-                               rf,
-                               location,
-                               name,
-                               str(strength) + '%',
-                               str(quality) + '%',
-                               str(symbol) + '%'])
+                # Add to the "status" array and write to CSV
+                row = [exec_time,
+                       tuner,
+                       channel,
+                       rf,
+                       location,
+                       name,
+                       str(strength) + '%',
+                       str(quality) + '%',
+                       str(symbol) + '%']
+                status.append(row)
+                writer.writerow(row)
 
                 # Increment the counter if any tuners are active
                 active_tuners += 1
@@ -105,3 +116,5 @@ while repeat > 0:
     print(f"{repeat} rounds remaining")
     if repeat > 0:
         time.sleep(repeat_interval - script_time)
+
+csv_file.close()
